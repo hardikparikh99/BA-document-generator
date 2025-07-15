@@ -1,0 +1,12 @@
+{
+  "file_id": "ab77b508-668d-4bdb-a2c3-1d251a0e4a2d",
+  "vector_id": "transcription_ab77b508-668d-4bdb-a2c3-1d251a0e4a2d",
+  "transcription": " client, good morning. I'm looking to develop a mobile application that works on both Android and iOS platforms. The core features I need include user registration and login, either through OTP or email. Once logged in, users should see a personalized dashboard tailored to their activity. I also want real-time notifications and seamless integration with a payment gateway, preferably Razer Pay. Security is a top priority, user data must be encrypted and securely stored. The UI should be modern and minimal, and the UPS should support both light and dark modes. Lastly, I'd like the app to be lightweight and optimized for different screen sizes. Company representative, thank you for clearly outlining your requirements. We'll ensure the application is scalable, user friendly, and adheres to best security practices. Based on your inputs, we'll also include an admin panel where you can manage users, view analytics, and control content. Our design team will provide mockups for both light and dark themes, and the development will follow agile methodology. We'll share a detailed proposal that includes the tech stack, development timeline, milestone breakdown, and cost estimate. Could you let us know if you have a preferred launch date or a budget range in mind? Also, are there any third-party tools, APIs, or integrations you'd like us to consider? Client, yes, I'd like the project to be completed within 8 to 10 weeks if possible. As for the budget, I'm looking at something in the range of 4 to 5 locks INR, depending on the features and post-launch support. For third-party tools, I'm open to your recommendations, but I definitely want analytics tools, crash reporting, and automated backups. Also, it would be helpful if we can schedule weekly review meetings to track progress. Company representative, that sounds absolutely doable. We'll tailor our solution to fit within your budget and timeline. We'll also ensure that all project updates are transparent, with weekly sprint reviews and demos. Once the proposal is approved, we can initiate the design phase and prepare the project plan. Thank you again for your time. We look forward to building this application with you.",
+  "metadata": {
+    "duration": 148.584,
+    "language": "en",
+    "file_type": "mp3",
+    "speakers": 1,
+    "created_at": "2025-06-11T18:02:43.029670"
+  }
+}

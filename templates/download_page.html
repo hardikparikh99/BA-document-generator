@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Documentation Download</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .format-options {
+            margin: 20px 0;
+        }
+        .format-option {
+            margin: 10px 0;
+        }
+        .format-option input {
+            margin-right: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .file-info {
+            margin-bottom: 20px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Documentation Download</h1>
+    
+    <div class="container">
+        <div class="file-info">
+            <h2>File: {{ file_metadata.get('original_filename', 'Unknown') }}</h2>
+            <p><strong>File ID:</strong> {{ file_id }}</p>
+            <p><strong>Processed on:</strong> {{ file_metadata.get('processed_date', 'Unknown') }}</p>
+        </div>
+
+        <h3>Select Format to Download</h3>
+        <form id="downloadForm">
+            <div class="format-options">
+                <div class="format-option">
+                    <input type="radio" id="pdf" name="format" value="pdf" checked>
+                    <label for="pdf">PDF Document</label>
+                </div>
+                <div class="format-option">
+                    <input type="radio" id="docx" name="format" value="docx">
+                    <label for="docx">Word Document (DOCX)</label>
+                </div>
+                <div class="format-option">
+                    <input type="radio" id="html" name="format" value="html">
+                    <label for="html">HTML Document</label>
+                </div>
+                <div class="format-option">
+                    <input type="radio" id="json" name="format" value="json">
+                    <label for="json">JSON (Raw Data)</label>
+                </div>
+            </div>
+            
+            <button type="button" onclick="downloadDocument()">Download Documentation</button>
+        </form>
+        
+        <div id="error" class="error"></div>
+    </div>
+
+    <script>
+        function downloadDocument() {
+            const fileId = "{{ file_id }}";
+            const format = document.querySelector('input[name="format"]:checked').value;
+            
+            // Redirect to the download endpoint
+            window.location.href = `/download/${fileId}/file?format=${format}`;
+        }
+    </script>
+</body>
+</html>

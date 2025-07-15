@@ -1,0 +1,1317 @@
+# version 1: WindSurf
+
+# """
+# Documentation Generator Agent for the CrewAI Multi-Agent Project Documentation System.
+# This agent acts as a Business Analyst to transform meeting transcriptions into 
+# structured, clear, and actionable project documentation.
+# """
+# import os
+# import json
+# import uuid
+# from datetime import datetime
+# from typing import Dict, Any, Optional, List
+# import asyncio
+
+# from crewai import Agent, Task
+# from pydantic import BaseModel, Field
+
+# from utils.config import get_settings
+# from utils.logger import get_agent_logger
+# from utils.pdf_generator import generate_pdf_from_json
+# from services.llm_service import LLMService
+# from services.local_storage_service import LocalStorageService
+# from models.database import store_documentation, get_documentation, update_processing_status
+
+# # Setup logger
+# logger = get_agent_logger("documentation")
+# settings = get_settings()
+
+# # Ensure documentations directory exists
+# os.makedirs("data/documentations", exist_ok=True)
+
+# class DocumentationGenerator:
+#     """
+#     Handles the generation of structured, clear project documentation from meeting transcriptions.
+#     Acts as a Business Analyst to transform meeting inputs into actionable documentation.
+#     """
+    
+#     def __init__(self):
+#         """Initialize the documentation generator."""
+#         self.llm_service = LLMService()
+#         self.storage_service = LocalStorageService()
+        
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         """
+#         Generate structured project documentation from a meeting transcription.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Result of the operation with documentation_id
+#         """
+#         try:
+#             # Get transcription from local storage
+#             logger.info(f"[DEBUG] Attempting to retrieve transcription for file_id: {file_id}")
+#             transcription_data = await self.storage_service.retrieve_transcription(file_id)
+#             if not transcription_data:
+#                 logger.error(f"[DEBUG] No transcription found for file_id: {file_id}")
+#                 raise ValueError(f"No transcription found for file_id: {file_id}")
+#             logger.info(f"[DEBUG] Transcription successfully retrieved for file_id: {file_id}")
+
+#             transcription = transcription_data.get("transcription", "")
+#             metadata = transcription_data.get("metadata", {})
+
+#             # Generate documentation using LLM
+#             system_prompt = """
+#             You are a Senior Business Analyst with expertise in requirements gathering, documentation, and project planning.
+            
+#             CRITICAL INSTRUCTION: Your primary source of information is the provided meeting transcription.
+            
+#             1. Extract ALL requirements, objectives, and details from the transcription.
+#             2. DO NOT invent company names, project names, or requirements that are not explicitly mentioned.
+#             3. DO NOT hallucinate or make up information not present in the transcription, EXCEPT for the project timeline section.
+#             4. For most sections, if information cannot be filled from the transcription, write 'Not discussed in meeting' or omit it.
+#             5. Use the exact names, terms, and details from the transcription (e.g., if it mentions 'XYZ company', use that name).
+#             6. Identify the actual participants, project type, and requirements directly from the transcription.
+            
+#             SPECIAL INSTRUCTION FOR PROJECT TIMELINE:
+#             1. For the Project Timeline section, you MUST create a realistic timeline even if not explicitly mentioned in the transcription.
+#             2. Use your expertise as a Business Analyst to estimate reasonable timeframes based on the scope and requirements identified.
+#             3. Include start dates, end dates, durations, and key deliverables for each phase.
+#             4. Start the timeline from the current date and project forward realistically.
+#             5. Make sure the timeline is detailed, professional, and actionable.
+            
+#             Your documentation must be professional and immediately usable, with a realistic project timeline that demonstrates your business analysis expertise.
+#             """
+
+#             # Get current date for the template
+#             current_date = datetime.now().strftime("%Y-%m-%d")
+            
+#             prompt = f"""
+#             Based ONLY on the following client meeting transcription, create a complete, professional Project Documentation Report:
+
+#             {transcription}
+
+#             CRITICAL INSTRUCTIONS:
+#             1. Use ONLY information that is actually present in the transcription above.
+#             2. DO NOT invent or hallucinate any content not mentioned in the transcription.
+#             3. DO NOT use any company names, project names, or details that aren't explicitly stated in the transcription.
+#             4. DO NOT use placeholders or template markers.
+#             5. If information for a section is not available in the transcription, either omit that section or write 'Not discussed in meeting'.
+#             6. Extract the actual company name, project type, and requirements directly from the transcription.
+#             7. Use the exact terminology, names, and details as mentioned in the transcription.
+            
+#             Your documentation should reflect EXACTLY what was discussed in the meeting - no more, no less.
+
+#             📄 **Project Documentation**
+
+#             **Prepared by**: (Use the name of the Business Analyst mentioned in the transcription)  
+#             **Date**: {current_date}  
+#             **Client**: (Use the client's name mentioned in the transcription)  
+#             **Project Title**: (Use the exact project title/description as mentioned in the transcription)
+
+#             ---
+
+#             1. 🧾 **Meeting Summary**
+
+#             | **Meeting Date** | (Only if mentioned in transcription) |
+#             |------------------|------------------|
+#             | **Attendees**    | (Only list attendees actually mentioned in the transcription) |
+#             | **Objective**    | (State the purpose of the meeting as described in the transcription) |
+#             | **Outcome**      | (Summarize the key decisions and outcomes mentioned in the transcription) |
+
+#             ---
+
+#             2. 🎯 **Project Requirements Overview**
+
+#             - (List the main project requirements mentioned in the transcription)  
+#             - (Use the exact requirements as stated in the transcription)  
+
+#             ---
+
+#             3. 🛠️ **User Types**
+
+#             (List all user types mentioned in the transcription, such as students, teachers, etc.)
+
+#             ---
+
+#             4. 📊 **Module Requirements**
+
+#             (For each user type/module mentioned in the transcription, list the specific requirements)
+
+#             ---
+
+#             5. 🚀 **Technical Requirements**
+
+#             (List any technical requirements mentioned in the transcription, such as mobile responsiveness, etc.)
+
+#             ---
+
+#             6. 🧩 **Delivery Approach**
+
+#             (Document the delivery approach mentioned in the transcription, such as module-by-module, agile, etc.)
+
+#             ---
+
+#             7. 🧪 **Implementation Priority**
+
+#             (List the implementation priority of modules as mentioned in the transcription)
+
+#             ---
+
+#             8. 🧱 **Additional Requirements**
+
+#             (List any additional requirements mentioned in the transcription that don't fit in other categories)
+
+#             ---
+
+#             9. 📅 **Project Timeline**
+
+#             (Create a realistic project timeline based on the requirements and scope identified in the transcription. Even if specific dates or timelines are not mentioned, use your reasoning to estimate reasonable timeframes for each phase of the project. Include start dates, end dates, and duration for each major milestone or deliverable.)
+
+#             Example format (adapt based on project requirements):
+            
+#             | **Phase/Milestone** | **Start Date** | **End Date** | **Duration** | **Key Deliverables** |
+#             |---------------------|---------------|--------------|--------------|----------------------|
+#             | Requirements Analysis | [Date] | [Date] | [X weeks] | [Deliverables] |
+#             | Design Phase | [Date] | [Date] | [X weeks] | [Deliverables] |
+#             | Development Phase | [Date] | [Date] | [X weeks] | [Deliverables] |
+#             | Testing | [Date] | [Date] | [X weeks] | [Deliverables] |
+#             | Deployment | [Date] | [Date] | [X weeks] | [Deliverables] |
+
+#             ---
+
+#             10. 💬 **Open Questions / Clarifications**
+
+#             - (First important question that needs clarification)  
+#             - (Second important question that needs clarification)
+
+#             ---
+
+#             11. 📎 **Attachments**
+
+#             - (List any attachments mentioned or state 'No attachments referenced in the meeting')  
+#             - (Suggest relevant documents that should be attached based on the project context)
+
+#             ---
+
+#             12. 🧑‍💼 **Sign-Off Section**
+
+#             | **Name** | **Role** | **Signature** | **Date** |
+#             |----------|----------|----------------|----------|
+#             | (Client representative name or appropriate title) | Client Representative | | |
+#             | Business Analyst Agent | Business Analyst | | {current_date} |
+
+#             ---
+
+#             FINAL CRITICAL INSTRUCTIONS:
+#             1. Base your documentation primarily on the meeting transcription provided above
+#             2. Return the output in clean Markdown format, suitable for PDF export
+#             3. DO NOT include ANY disclaimers about this being fictional or a template
+#             4. DO NOT include ANY text like "Note: This is based on..." or "This document is an example..."
+#             5. DO NOT use ANY placeholders or template markers like [Extract X] or (Insert Y)
+#             6. Use ONLY the company names, project types, and requirements ACTUALLY mentioned in the transcription
+#             7. If a section cannot be filled from the transcription content, either omit it or write 'Not discussed in meeting'
+#             8. DO NOT invent requirements, features, or details not explicitly stated in the transcription
+#             9. Format all tables properly with information directly extracted from the transcription
+#             10. Write as if you were the business analyst who actually participated in this meeting (use their name if mentioned)
+            
+#             SPECIAL EXCEPTION FOR PROJECT TIMELINE:
+#             1. For the Project Timeline section ONLY, you MUST create a detailed, realistic timeline even if not mentioned in the transcription
+#             2. Use your business analysis expertise to estimate reasonable timeframes based on the identified requirements
+#             3. Include specific dates, durations, and deliverables for each project phase
+#             4. Make the timeline professional, detailed, and immediately actionable
+#             5. Start the timeline from the current date ({current_date}) and project forward realistically
+            
+#             REMEMBER: Except for the Project Timeline section, your documentation must reflect EXACTLY what was discussed in the actual meeting transcription.
+#             """
+
+#             logger.info(f"[DEBUG] Sending prompt to LLM for file_id: {file_id}")
+#             documentation_content = await self.llm_service.generate_response(prompt, system_prompt)
+#             logger.info(f"[DEBUG] LLM response received for file_id: {file_id}. Length: {len(documentation_content) if documentation_content else 0}")
+
+#             # Create documentation object
+#             documentation_id = f"doc_{str(uuid.uuid4())[:8]}"
+#             documentation = {
+#                 "documentation_id": documentation_id,
+#                 "file_id": file_id,
+#                 "title": f"Project Documentation - {metadata.get('original_filename', 'Untitled')}",
+#                 "content": documentation_content,
+#                 "metadata": {
+#                     **metadata,
+#                     "generated_at": datetime.utcnow().isoformat(),
+#                     "document_type": "project_documentation"
+#                 }
+#             }
+
+#             # Save documentation to file
+#             doc_path = os.path.join("data/documentations", f"{file_id}.json")
+#             logger.info(f"[DEBUG] Writing documentation to {doc_path}")
+#             with open(doc_path, 'w', encoding='utf-8') as f:
+#                 json.dump(documentation, f, indent=2)
+#             logger.info(f"[DEBUG] Documentation file written: {doc_path}")
+            
+#             # Store documentation in database
+#             await store_documentation(documentation)
+            
+#             logger.info(f"[DEBUG] Documentation stored successfully for file_id: {file_id}")
+            
+#             # Generate PDF from JSON
+#             pdf_path = generate_pdf_from_json(doc_path)
+#             if pdf_path:
+#                 logger.info(f"[DEBUG] PDF documentation generated successfully: {pdf_path}")
+#                 documentation["pdf_path"] = pdf_path
+#                 # Update the JSON file with the PDF path
+#                 with open(doc_path, 'w', encoding='utf-8') as f:
+#                     json.dump(documentation, f, indent=2)
+#             else:
+#                 logger.warning(f"[DEBUG] Failed to generate PDF documentation for file_id: {file_id}")
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="completed",
+#                 progress=100,
+#                 current_stage="documentation"
+#             )
+
+#             logger.info(f"Documentation generated successfully: {documentation_id}")
+
+#             return {
+#                 "success": True,
+#                 "documentation_id": documentation_id,
+#                 "file_path": doc_path,
+#                 "pdf_path": pdf_path if pdf_path else None
+#             }
+            
+#         except Exception as e:
+#             error_msg = f"Error generating documentation: {str(e)}"
+#             logger.error(error_msg)
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,  # Set progress to 0 for failed state
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+            
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+    
+#     async def get_documentation(self, file_id: str) -> Optional[Dict[str, Any]]:
+#         """
+#         Retrieve generated documentation for a file.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Documentation data if found, None otherwise
+#         """
+#         try:
+#             doc_path = os.path.join("data/documentations", f"{file_id}.json")
+#             if not os.path.exists(doc_path):
+#                 return None
+                
+#             with open(doc_path, 'r', encoding='utf-8') as f:
+#                 return json.load(f)
+                
+#         except Exception as e:
+#             logger.error(f"Error retrieving documentation: {str(e)}")
+#             return None
+
+# class DocumentationAgent:
+#     """
+#     Agent responsible for generating structured, clear project documentation.
+#     Acts as a Business Analyst to transform meeting inputs into actionable documentation.
+#     """
+    
+#     def __init__(self):
+#         """Initialize the Documentation Generator Agent."""
+#         self.logger = logger
+#         self.generator = DocumentationGenerator()
+        
+#         # Create a CrewAI agent for the Business Analyst role
+#         self.agent = Agent(
+#             role="Business Analyst",
+#             goal="Create structured, clear project documentation after a client meeting.",
+#             backstory=(
+#                 "You are a professional Business Analyst in an IT consulting company. "
+#                 "You specialize in transforming meeting inputs into actionable documentation."
+#             ),
+#             verbose=True
+#         )
+        
+#         # Create the documentation generation task
+#         self.generate_doc_task = Task(
+#             name="Generate Project Documentation",
+#             description="Convert meeting notes into formal business documentation.",
+#             expected_output="A comprehensive project documentation in markdown format with all sections properly filled out based on the meeting transcription.",
+#             instruction="""
+#             You are a professional Business Analyst in an IT consulting company.
+
+#             Your task is to create a complete, clean, and structured **Project Documentation Report** based on a given client meeting input.
+
+#             The document must be clear, professional, and usable by developers, project managers, and stakeholders. Use the following structure strictly and keep placeholders where information is not provided.
+
+#             ---
+
+#             📄 **Project Documentation Template**
+
+#             **Prepared by**: Business Analyst Agent  
+#             **Date**: {{current_date}}  
+#             **Client**: {{client_name}}  
+#             **Project Title**: {{project_title}}
+
+#             ---
+
+#             1. 🧾 **Meeting Summary**
+
+#             | **Meeting Date** | {{meeting_date}} |
+#             |------------------|------------------|
+#             | **Attendees**    | {{attendees}} |
+#             | **Objective**    | {{meeting_objective}} |
+#             | **Outcome**      | {{meeting_outcome}} |
+
+#             ---
+
+#             2. 🎯 **Business Objectives**
+
+#             - {{objective_1}}  
+#             - {{objective_2}}  
+#             - {{objective_3}}  
+
+#             ---
+
+#             3. 🛠️ **Project Scope**
+
+#             **In Scope:**
+#             - {{in_scope_item_1}}  
+#             - {{in_scope_item_2}}
+
+#             **Out of Scope:**
+#             - {{out_scope_item_1}}  
+#             - {{out_scope_item_2}}
+
+#             ---
+
+#             4. 📊 **Current State Analysis (As-Is)**
+
+#             - **Systems Used**: {{existing_systems}}  
+#             - **Pain Points**:  
+#               - {{pain_point_1}}  
+#               - {{pain_point_2}}
+
+#             ---
+
+#             5. 🚀 **Future State Vision (To-Be)**
+
+#             - {{future_state_vision_1}}  
+#             - {{future_state_vision_2}}
+
+#             ---
+
+#             6. 🧩 **Functional Requirements**
+
+#             | **ID** | **Requirement** | **Priority** | **Remarks** |
+#             |--------|------------------|--------------|-------------|
+#             | FR-01  | {{requirement_1}} | {{priority_1}} | {{remark_1}} |
+#             | FR-02  | {{requirement_2}} | {{priority_2}} | {{remark_2}} |
+
+#             ---
+
+#             7. 🧪 **Non-Functional Requirements**
+
+#             - **Performance**: {{performance_req}}  
+#             - **Availability**: {{availability_req}}  
+#             - **Security**: {{security_req}}  
+#             - **Compliance**: {{compliance_req}}
+
+#             ---
+
+#             8. 🧱 **Integration Requirements**
+
+#             | **System** | **Type** | **Details** |
+#             |------------|----------|-------------|
+#             | {{system_name}} | {{integration_type}} | {{details}} |
+
+#             ---
+
+#             9. 📅 **High-Level Timeline (Tentative)**
+
+#             | **Phase** | **Start Date** | **End Date** | **Remarks** |
+#             |-----------|----------------|--------------|-------------|
+#             | {{phase_name}} | {{start_date}} | {{end_date}} | {{remarks}} |
+
+#             ---
+
+#             10. 💬 **Open Questions / Clarifications**
+
+#             - {{question_1}}  
+#             - {{question_2}}
+
+#             ---
+
+#             11. 📎 **Attachments**
+
+#             - {{attachment_1}}  
+#             - {{attachment_2}}
+
+#             ---
+
+#             12. 🧑‍💼 **Sign-Off Section**
+
+#             | **Name** | **Role** | **Signature** | **Date** |
+#             |----------|----------|----------------|----------|
+#             | {{client_rep_name}} | Client Representative | | |
+#             | Business Analyst Agent | Business Analyst | | {{current_date}} |
+
+#             ---
+
+#             🔁 You should return the output in **Markdown format**, suitable for copy-pasting into documentation or exporting as PDF.
+
+#             Make sure your language is **professional, clean, and actionable**.
+#             """
+#         )
+    
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         """
+#         Generate documentation for a file using CrewAI task-based approach.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Result of the operation
+#         """
+#         try:
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="processing",
+#                 progress=80,
+#                 current_stage="documentation"
+#             )
+            
+#             # Get transcription from local storage
+#             logger.info(f"[DEBUG] Retrieving transcription for file_id: {file_id} for CrewAI task")
+#             storage_service = LocalStorageService()
+#             transcription_data = await storage_service.retrieve_transcription(file_id)
+            
+#             if not transcription_data:
+#                 logger.error(f"[DEBUG] No transcription found for file_id: {file_id}")
+#                 raise ValueError(f"No transcription found for file_id: {file_id}")
+                
+#             transcription = transcription_data.get("transcription", "")
+#             metadata = transcription_data.get("metadata", {})
+            
+#             # In a real CrewAI implementation, we would execute the task with the agent
+#             # Since we're simulating this behavior, we'll use the generator directly
+#             # but with the task-based template
+#             logger.info(f"[DEBUG] Executing documentation generation task for file_id: {file_id}")
+            
+#             # Generate documentation using the generator
+#             result = await self.generator.generate_documentation(file_id)
+            
+#             if result["success"]:
+#                 logger.info(f"Documentation generated successfully for file: {file_id}")
+#                 return {
+#                     "success": True,
+#                     "documentation_id": result["documentation_id"],
+#                     "file_path": result["file_path"],
+#                     "pdf_path": result.get("pdf_path")
+#                 }
+#             else:
+#                 raise Exception(result.get("message", "Failed to generate documentation"))
+                
+#         except Exception as e:
+#             error_msg = f"Error in generate_documentation: {str(e)}"
+#             logger.error(error_msg)
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,  # Set progress to 0 for failed state
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+            
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+    
+#     async def get_documentation(self, file_id: str) -> Optional[Dict[str, Any]]:
+#         """
+#         Get documentation for a file.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Documentation data if found, None otherwise
+#         """
+#         try:
+#             return await get_documentation(file_id)
+#         except Exception as e:
+#             logger.error(f"Error in get_documentation: {str(e)}")
+#             return None
+    
+#     # The create_task method is no longer needed as we're using direct calls
+#     # to the DocumentationGenerator instead of CrewAI tasks
+
+# # Version 2: ChatGPT
+# """
+# Documentation Generator Agent for the CrewAI Multi-Agent Project Documentation System.
+# This agent acts as a Business Analyst to transform meeting transcriptions into structured, clear, and actionable project documentation.
+# """
+# import os
+# import json
+# import uuid
+# from datetime import datetime
+# from typing import Dict, Any, Optional, List
+# import asyncio
+
+# from crewai import Agent, Task
+# from pydantic import BaseModel, Field
+
+# from utils.config import get_settings
+# from utils.logger import get_agent_logger
+# from utils.pdf_generator import generate_pdf_from_json
+# from services.llm_service import LLMService
+# from services.local_storage_service import LocalStorageService
+# from models.database import store_documentation, get_documentation, update_processing_status
+
+# # Setup logger
+# logger = get_agent_logger("documentation")
+# settings = get_settings()
+
+# # Ensure documentations directory exists
+# os.makedirs("data/documentations", exist_ok=True)
+
+# class DocumentationGenerator:
+#     """
+#     Handles the generation of structured, clear project documentation from meeting transcriptions.
+#     Acts as a Business Analyst to transform meeting inputs into actionable documentation.
+#     """
+    
+#     def __init__(self):
+#         self.llm_service = LLMService()
+#         self.storage_service = LocalStorageService()
+
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         try:
+#             transcription_data = await self.storage_service.retrieve_transcription(file_id)
+#             if not transcription_data:
+#                 raise ValueError(f"No transcription found for file_id: {file_id}")
+
+#             transcription = transcription_data.get("transcription", "")
+#             metadata = transcription_data.get("metadata", {})
+#             current_date = datetime.now().strftime("%Y-%m-%d")
+
+#             system_prompt = """
+# You are a Senior Business Analyst specializing in fintech MVP documentation and SOW creation. Based on the input transcription or client discussion, generate a detailed, structured, and investor/stakeholder-ready project documentation. The final output should resemble a formal Statement of Work (SOW) or Requirements Specification Document.
+
+# Instructions:
+
+# 1. Use clear, professional language suitable for stakeholders, developers, and compliance reviewers.
+# 2. Structure the documentation into real-world, business-aligned sections that match industry-standard SOW formats, such as:
+#    - Executive Summary  
+#    - Goals and Objectives  
+#    - Key MVP Features & Scope  
+#    - Out of Scope Items  
+#    - Proposed Architecture (3rd Party Integrations, APIs, Vendors)  
+#    - Technology Stack  
+#    - Regulatory Dependencies (KYC, AML, licensing needs)  
+#    - User Journeys (registration, KYC, transfer, etc.)  
+#    - Functional & Non-Functional Requirements  
+#    - Security and Compliance Considerations  
+#    - Open Questions / Risks  
+#    - MVP Delivery Timeline (with realistic, phase-based milestone chart)  
+#    - Suggested Tools / Services  
+#    - Appendix / References (if applicable)
+# 3. DO NOT copy/paste generic templates. Instead, infer real sections and details based on what is present in the meeting transcript or notes.
+# 4. Include specific vendor suggestions (like Sumsub, Currencycloud, Stripe) if mentioned or implied in the discussion.
+# 5. For timeline, generate a realistic phase-based delivery plan (Discovery, Design, Build, UAT, Launch).
+# 6. Your output must be structured in clean, professional Markdown format ready for PDF export.
+# 7. Use visual tables or bullet formats where applicable (e.g., tech stack, integration partners).
+# 8. If a section’s detail is missing, write “Not discussed in meeting” instead of inventing it.
+
+# This document should be long-form (ideally 6–10 pages when exported as PDF) and mirror what a top consulting firm would deliver after a client MVP kickoff call.
+# """
+
+#             prompt = f"Meeting Transcript:\n\n{transcription}"
+
+#             documentation_content = await self.llm_service.generate_response(prompt, system_prompt)
+#             documentation_id = f"doc_{str(uuid.uuid4())[:8]}"
+#             documentation = {
+#                 "documentation_id": documentation_id,
+#                 "file_id": file_id,
+#                 "title": f"Project Documentation - {metadata.get('original_filename', 'Untitled')}",
+#                 "content": documentation_content,
+#                 "metadata": {
+#                     **metadata,
+#                     "generated_at": datetime.utcnow().isoformat(),
+#                     "document_type": "project_documentation"
+#                 }
+#             }
+
+#             doc_path = os.path.join("data/documentations", f"{file_id}.json")
+#             with open(doc_path, 'w', encoding='utf-8') as f:
+#                 json.dump(documentation, f, indent=2)
+
+#             await store_documentation(documentation)
+
+#             pdf_path = generate_pdf_from_json(doc_path)
+#             if pdf_path:
+#                 documentation["pdf_path"] = pdf_path
+#                 with open(doc_path, 'w', encoding='utf-8') as f:
+#                     json.dump(documentation, f, indent=2)
+
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="completed",
+#                 progress=100,
+#                 current_stage="documentation"
+#             )
+
+#             return {
+#                 "success": True,
+#                 "documentation_id": documentation_id,
+#                 "file_path": doc_path,
+#                 "pdf_path": pdf_path if pdf_path else None
+#             }
+
+#         except Exception as e:
+#             error_msg = f"Error generating documentation: {str(e)}"
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+
+# class DocumentationAgent:
+#     def __init__(self):
+#         self.logger = logger
+#         self.generator = DocumentationGenerator()
+#         self.agent = Agent(
+#             role="Business Analyst",
+#             goal="Create structured, clear project documentation after a client meeting.",
+#             backstory=(
+#                 "You are a professional Business Analyst in an IT consulting company. "
+#                 "You specialize in transforming meeting inputs into actionable documentation."
+#             ),
+#             verbose=True
+#         )
+#         self.generate_doc_task = Task(
+#             name="Generate Project Documentation",
+#             description="Convert meeting notes into formal business documentation.",
+#             expected_output="A comprehensive project documentation in markdown format with all sections properly filled out based on the meeting transcription.",
+#             instruction="Uses updated prompt for accurate SOW-style documentation."
+#         )
+
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         try:
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="processing",
+#                 progress=80,
+#                 current_stage="documentation"
+#             )
+
+#             result = await self.generator.generate_documentation(file_id)
+
+#             if result["success"]:
+#                 return {
+#                     "success": True,
+#                     "documentation_id": result["documentation_id"],
+#                     "file_path": result["file_path"],
+#                     "pdf_path": result.get("pdf_path")
+#                 }
+#             else:
+#                 raise Exception(result.get("message", "Failed to generate documentation"))
+
+#         except Exception as e:
+#             error_msg = f"Error in generate_documentation: {str(e)}"
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+
+#     async def get_documentation(self, file_id: str) -> Optional[Dict[str, Any]]:
+#         try:
+#             return await get_documentation(file_id)
+#         except Exception as e:
+#             logger.error(f"Error in get_documentation: {str(e)}")
+#             return None
+
+
+# # Version 3:
+# """
+# Documentation Generator Agent for the CrewAI Multi-Agent Project Documentation System.
+# This agent acts as a Business Analyst to transform meeting transcriptions into 
+# structured, clear, and actionable project documentation.
+# """
+# import os
+# import json
+# import uuid
+# from datetime import datetime
+# from typing import Dict, Any, Optional, List
+# import asyncio
+
+# from crewai import Agent, Task
+# from pydantic import BaseModel, Field
+
+# from utils.config import get_settings
+# from utils.logger import get_agent_logger
+# from utils.pdf_generator import generate_pdf_from_json
+# from services.llm_service import LLMService
+# from services.local_storage_service import LocalStorageService
+# from models.database import store_documentation, get_documentation, update_processing_status
+
+# # Setup logger
+# logger = get_agent_logger("documentation")
+# settings = get_settings()
+
+# # Ensure documentations directory exists
+# os.makedirs("data/documentations", exist_ok=True)
+
+# class DocumentationGenerator:
+#     """
+#     Handles the generation of structured, clear project documentation from meeting transcriptions.
+#     Acts as a Business Analyst to transform meeting inputs into actionable documentation.
+#     """
+    
+#     def __init__(self):
+#         """Initialize the documentation generator."""
+#         self.llm_service = LLMService()
+#         self.storage_service = LocalStorageService()
+        
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         """
+#         Generate structured project documentation from a meeting transcription.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Result of the operation with documentation_id
+#         """
+#         try:
+#             # Get transcription from local storage
+#             logger.info(f"[DEBUG] Attempting to retrieve transcription for file_id: {file_id}")
+#             transcription_data = await self.storage_service.retrieve_transcription(file_id)
+#             if not transcription_data:
+#                 logger.error(f"[DEBUG] No transcription found for file_id: {file_id}")
+#                 raise ValueError(f"No transcription found for file_id: {file_id}")
+#             logger.info(f"[DEBUG] Transcription successfully retrieved for file_id: {file_id}")
+
+#             transcription = transcription_data.get("transcription", "")
+#             metadata = transcription_data.get("metadata", {})
+
+#             # Generate documentation using LLM
+#             system_prompt = """
+#             You are a Senior Business Analyst with expertise in requirements gathering, documentation, and project planning.
+            
+#             CRITICAL INSTRUCTION: Your primary source of information is the provided meeting transcription.
+            
+#             1. Extract ALL requirements, objectives, and details from the transcription.
+#             2. DO NOT invent company names, project names, or requirements that are not explicitly mentioned.
+#             3. DO NOT hallucinate or make up information not present in the transcription, EXCEPT for the project timeline section.
+#             4. For most sections, if information cannot be filled from the transcription, write 'Not discussed in meeting' or omit it.
+#             5. Use the exact names, terms, and details from the transcription (e.g., if it mentions 'XYZ company', use that name).
+#             6. Identify the actual participants, project type, and requirements directly from the transcription.
+#             7. Organize information into clear, logical sections with proper hierarchical structure.
+#             8. Use bullet points, tables, and formatting to improve readability.
+#             9. Prioritize clarity and actionability in your documentation.
+#             10. Include specific, measurable criteria for requirements whenever possible.
+#             11. Highlight dependencies between different requirements or components.
+#             12. Identify potential risks or challenges mentioned in the transcription.
+            
+#             SPECIAL INSTRUCTION FOR PROJECT TIMELINE:
+#             1. For the Project Timeline section, you MUST create a realistic timeline even if not explicitly mentioned in the transcription.
+#             2. Use your expertise as a Business Analyst to estimate reasonable timeframes based on the scope and requirements identified.
+#             3. Include start dates, end dates, durations, and key deliverables for each phase.
+#             4. Start the timeline from the current date and project forward realistically.
+#             5. Make sure the timeline is detailed, professional, and actionable.
+#             6. Break down the timeline into logical phases (e.g., Discovery, Design, Development, Testing, Deployment).
+#             7. Account for dependencies between phases and tasks.
+#             8. Include buffer time for unexpected delays or challenges.
+            
+#             Your documentation must be professional and immediately usable, with a realistic project timeline that demonstrates your business analysis expertise.
+#             """
+
+#             # Get current date for the template
+#             current_date = datetime.now().strftime("%Y-%m-%d")
+            
+#             prompt = f"""
+#             Based on the following client meeting transcription, create a comprehensive, professional Statement of Work (SOW) document for a fintech MVP project:
+
+#             MEETING TRANSCRIPTION:
+#             {transcription}
+
+#             Generate a complete SOW document with the following structure and approach:
+
+#             # 📋 **STATEMENT OF WORK (SOW)**
+#             ## **Cross-Border Remittance MVP Development**
+
+#             **Document Version:** 1.0  
+#             **Prepared by:** Senior Business Analyst & Solution Architect  
+#             **Date:** {current_date}  
+#             **Client:** [Extract from transcription]  
+#             **Project:** [Extract project name/type from transcription]
+
+#             ---
+
+#             ## 🎯 **EXECUTIVE SUMMARY**
+
+#             [Provide a 3-4 paragraph executive summary that covers:
+#             - Project overview based on transcription
+#             - Key business objectives mentioned
+#             - Proposed solution approach
+#             - Expected outcomes and benefits]
+
+#             ---
+
+#             ## 📈 **PROJECT OBJECTIVES & SUCCESS CRITERIA**
+
+#             ### Business Objectives
+#             [List specific business goals mentioned in the transcription]
+
+#             ### Success Criteria
+#             [Define measurable success metrics based on discussion]
+
+#             ### Key Performance Indicators (KPIs)
+#             [Suggest relevant KPIs for the project type discussed]
+
+#             ---
+
+#             ## 🔍 **CURRENT STATE ANALYSIS**
+
+#             ### Existing Challenges
+#             [List pain points and challenges mentioned in the transcription]
+
+#             ### Market Opportunity
+#             [Describe the market opportunity if discussed]
+
+#             ### Competitive Landscape
+#             [Reference any competitors mentioned in the discussion]
+
+#             ---
+
+#             ## 🚀 **PROPOSED SOLUTION OVERVIEW**
+
+#             ### MVP Scope & Approach
+#             [Detail the MVP approach discussed in the meeting]
+
+#             ### Core Value Proposition
+#             [Articulate the main value proposition mentioned]
+
+#             ### Target User Segments
+#             [Identify user types discussed in the transcription]
+
+#             ---
+
+#             ## 🛠️ **TECHNICAL ARCHITECTURE & INTEGRATION STRATEGY**
+
+#             ### Recommended Architecture Approach
+#             [Based on the discussion, recommend appropriate architecture]
+
+#             ### Third-Party Integration Strategy
+#             [List and analyze integration requirements mentioned, such as:]
+
+#             #### 🔐 **KYC & AML Services**
+#             [If discussed, recommend specific vendors and integration approach]
+
+#             #### 💱 **Cross-Border Payment Rails & FX**
+#             [Detail payment processing requirements and vendor recommendations]
+
+#             #### 💳 **Payment Processing & Card Acceptance**
+#             [Cover payment method requirements discussed]
+
+#             #### 🏦 **Banking & Wallet Services**
+#             [Address account/wallet requirements if mentioned]
+
+#             #### 🛡️ **Security & Authentication**
+#             [Detail security requirements and implementation approach]
+
+#             ### Technology Stack Recommendations
+#             [Recommend appropriate tech stack based on requirements discussed]
+
+#             ---
+
+#             ## 📋 **DETAILED FUNCTIONAL REQUIREMENTS**
+
+#             ### User Registration & Onboarding
+#             [Detail requirements based on user journey discussed]
+
+#             ### KYC & Compliance Workflow
+#             [Specify KYC requirements if mentioned in transcription]
+
+#             ### Money Transfer Functionality
+#             [Detail transfer features and workflows discussed]
+
+#             ### Account Management
+#             [Cover account features mentioned in the discussion]
+
+#             ### Admin & Operations Dashboard
+#             [Detail admin requirements if discussed]
+
+#             ---
+
+#             ## 🔒 **REGULATORY & COMPLIANCE CONSIDERATIONS**
+
+#             ### Licensing Requirements
+#             [Address licensing needs mentioned or implied]
+
+#             ### AML/KYC Compliance
+#             [Detail compliance requirements discussed]
+
+#             ### Data Protection & Privacy
+#             [Cover data protection requirements]
+
+#             ### Regional Compliance
+#             [Address geographic/regional compliance needs mentioned]
+
+#             ---
+
+#             ## 📊 **IMPLEMENTATION APPROACH & METHODOLOGY**
+
+#             ### Development Methodology
+#             [Recommend appropriate development approach]
+
+#             ### Phased Delivery Strategy
+#             [Create a phased approach based on requirements discussed]
+
+#             ### Quality Assurance Strategy
+#             [Detail QA approach for the project type]
+
+#             ---
+
+#             ## 📅 **PROJECT TIMELINE & MILESTONES**
+
+#             ### Phase-wise Delivery Plan
+#             [Create a detailed timeline with the following structure:]
+
+#             | **Phase** | **Duration** | **Key Deliverables** | **Dependencies** |
+#             |-----------|--------------|---------------------|------------------|
+#             | Discovery & Requirements | [X weeks] | [List deliverables] | [List dependencies] |
+#             | UI/UX Design | [X weeks] | [List deliverables] | [List dependencies] |
+#             | Backend Development | [X weeks] | [List deliverables] | [List dependencies] |
+#             | Frontend Development | [X weeks] | [List deliverables] | [List dependencies] |
+#             | Integration & Testing | [X weeks] | [List deliverables] | [List dependencies] |
+#             | Deployment & Launch | [X weeks] | [List deliverables] | [List dependencies] |
+
+#             ### Critical Path Analysis
+#             [Identify critical dependencies and potential bottlenecks]
+
+#             ---
+
+#             ## 💰 **INVESTMENT & RESOURCE REQUIREMENTS**
+
+#             ### Development Investment Range
+#             [Provide realistic budget ranges based on scope discussed]
+
+#             ### Ongoing Operational Costs
+#             [Estimate operational costs for third-party services]
+
+#             ### Resource Requirements
+#             [Detail team structure and resource needs]
+
+#             ---
+
+#             ## ⚠️ **RISK ASSESSMENT & MITIGATION**
+
+#             ### Technical Risks
+#             [Identify and assess technical risks]
+
+#             ### Regulatory Risks
+#             [Address compliance and regulatory risks]
+
+#             ### Market Risks
+#             [Consider market and competitive risks]
+
+#             ### Mitigation Strategies
+#             [Propose specific mitigation approaches]
+
+#             ---
+
+#             ## ❓ **OPEN QUESTIONS & NEXT STEPS**
+
+#             ### Critical Decisions Required
+#             [List key decisions that need to be made]
+
+#             ### Information Gathering Requirements
+#             [Identify additional information needed]
+
+#             ### Recommended Next Steps
+#             [Propose specific next actions]
+
+#             ---
+
+#             ## 📎 **APPENDICES**
+
+#             ### A. Vendor Evaluation Criteria
+#             [Provide criteria for evaluating third-party vendors]
+
+#             ### B. Compliance Checklist
+#             [Create a compliance verification checklist]
+
+#             ### C. Technical Specifications Template
+#             [Outline technical documentation requirements]
+
+#             ---
+
+#             ## ✅ **APPROVAL & SIGN-OFF**
+
+#             | **Role** | **Name** | **Signature** | **Date** |
+#             |----------|----------|---------------|----------|
+#             | Client Stakeholder | [From transcription] | | |
+#             | Business Analyst | Senior BA | | {current_date} |
+#             | Solution Architect | Senior SA | | {current_date} |
+
+#             ---
+
+#             **FINAL INSTRUCTIONS FOR CONTENT GENERATION:**
+
+#             1. **Content Fidelity**: Base ALL sections on actual content from the transcription
+#             2. **Professional Tone**: Use consultant-level business language throughout
+#             3. **Technical Depth**: Provide specific technical recommendations where appropriate
+#             4. **Actionable Insights**: Include concrete next steps and recommendations
+#             5. **Industry Standards**: Follow fintech industry best practices and terminology
+#             6. **Completeness**: Ensure each section provides substantial value and detail
+#             7. **Formatting**: Use clean Markdown with proper tables, bullets, and hierarchy
+#             8. **Length**: Generate a comprehensive document (8-12 pages when exported to PDF)
+#             9. **Specificity**: Include specific vendor names, technologies, and approaches where relevant
+#             10. **Business Value**: Clearly articulate business value and ROI throughout
+
+#             Remember: This document should be immediately usable by stakeholders, developers, and investors. It should demonstrate deep expertise while remaining accessible to business audiences.
+#             """
+
+#             logger.info(f"[DEBUG] Sending enhanced prompt to LLM for file_id: {file_id}")
+#             documentation_content = await self.llm_service.generate_response(prompt, system_prompt)
+#             logger.info(f"[DEBUG] LLM response received for file_id: {file_id}. Length: {len(documentation_content) if documentation_content else 0}")
+
+#             # Create documentation object
+#             documentation_id = f"doc_{str(uuid.uuid4())[:8]}"
+#             documentation = {
+#                 "documentation_id": documentation_id,
+#                 "file_id": file_id,
+#                 "title": f"Statement of Work - {metadata.get('original_filename', 'Untitled')}",
+#                 "content": documentation_content,
+#                 "metadata": {
+#                     **metadata,
+#                     "generated_at": datetime.utcnow().isoformat(),
+#                     "document_type": "statement_of_work",
+#                     "document_version": "1.0"
+#                 }
+#             }
+
+#             # Save documentation to file
+#             doc_path = os.path.join("data/documentations", f"{file_id}.json")
+#             logger.info(f"[DEBUG] Writing documentation to {doc_path}")
+#             with open(doc_path, 'w', encoding='utf-8') as f:
+#                 json.dump(documentation, f, indent=2)
+#             logger.info(f"[DEBUG] Documentation file written: {doc_path}")
+            
+#             # Store documentation in database
+#             await store_documentation(documentation)
+            
+#             logger.info(f"[DEBUG] Documentation stored successfully for file_id: {file_id}")
+            
+#             # Generate PDF from JSON
+#             pdf_path = generate_pdf_from_json(doc_path)
+#             if pdf_path:
+#                 logger.info(f"[DEBUG] PDF documentation generated successfully: {pdf_path}")
+#                 documentation["pdf_path"] = pdf_path
+#                 # Update the JSON file with the PDF path
+#                 with open(doc_path, 'w', encoding='utf-8') as f:
+#                     json.dump(documentation, f, indent=2)
+#             else:
+#                 logger.warning(f"[DEBUG] Failed to generate PDF documentation for file_id: {file_id}")
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="completed",
+#                 progress=100,
+#                 current_stage="documentation"
+#             )
+
+#             logger.info(f"Documentation generated successfully: {documentation_id}")
+
+#             return {
+#                 "success": True,
+#                 "documentation_id": documentation_id,
+#                 "file_path": doc_path,
+#                 "pdf_path": pdf_path if pdf_path else None
+#             }
+            
+#         except Exception as e:
+#             error_msg = f"Error generating documentation: {str(e)}"
+#             logger.error(error_msg)
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,  # Set progress to 0 for failed state
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+            
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+    
+#     async def get_documentation(self, file_id: str) -> Optional[Dict[str, Any]]:
+#         """
+#         Retrieve generated documentation for a file.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Documentation data if found, None otherwise
+#         """
+#         try:
+#             doc_path = os.path.join("data/documentations", f"{file_id}.json")
+#             if not os.path.exists(doc_path):
+#                 return None
+                
+#             with open(doc_path, 'r', encoding='utf-8') as f:
+#                 return json.load(f)
+                
+#         except Exception as e:
+#             logger.error(f"Error retrieving documentation: {str(e)}")
+#             return None
+
+# class DocumentationAgent:
+#     """
+#     Agent responsible for generating structured, clear project documentation.
+#     Acts as a Business Analyst to transform meeting inputs into actionable documentation.
+#     """
+    
+#     def __init__(self):
+#         """Initialize the Documentation Generator Agent."""
+#         self.logger = logger
+#         self.generator = DocumentationGenerator()
+        
+#         # Create a CrewAI agent for the Business Analyst role
+#         self.agent = Agent(
+#             role="Senior Business Analyst & Solution Architect",
+#             goal="Create comprehensive, investor-ready project documentation and SOW after client meetings.",
+#             backstory=(
+#                 "You are a seasoned Senior Business Analyst and Solution Architect with 15+ years "
+#                 "of experience in fintech, cross-border payments, and MVP development. You specialize "
+#                 "in creating detailed, professional documentation that serves both technical teams and "
+#                 "business stakeholders. Your documents are known for their depth, clarity, and actionable insights."
+#             ),
+#             verbose=True
+#         )
+        
+#         # Create the enhanced documentation generation task
+#         self.generate_doc_task = Task(
+#             name="Generate Comprehensive SOW Documentation",
+#             description="Convert meeting transcription into a formal, comprehensive Statement of Work suitable for fintech MVP projects.",
+#             expected_output="A detailed Statement of Work document in markdown format with all sections properly filled out based on the meeting transcription, including technical architecture, vendor recommendations, timelines, and risk assessments.",
+#             instruction="""
+#             Create a comprehensive Statement of Work (SOW) document that includes:
+#             - Executive summary and business objectives
+#             - Technical architecture and integration strategy
+#             - Detailed functional requirements
+#             - Regulatory and compliance considerations
+#             - Implementation approach and timeline
+#             - Investment requirements and risk assessment
+#             - Vendor recommendations and next steps
+            
+#             The document should be 8-12 pages when exported to PDF and demonstrate deep expertise in fintech and cross-border payment systems.
+#             """
+#         )
+    
+#     async def generate_documentation(self, file_id: str) -> Dict[str, Any]:
+#         """
+#         Generate documentation for a file using enhanced SOW approach.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Result of the operation
+#         """
+#         try:
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="processing",
+#                 progress=80,
+#                 current_stage="documentation"
+#             )
+            
+#             # Generate documentation using the enhanced generator
+#             result = await self.generator.generate_documentation(file_id)
+            
+#             if result["success"]:
+#                 logger.info(f"Enhanced SOW documentation generated successfully for file: {file_id}")
+#                 return {
+#                     "success": True,
+#                     "documentation_id": result["documentation_id"],
+#                     "file_path": result["file_path"],
+#                     "pdf_path": result.get("pdf_path")
+#                 }
+#             else:
+#                 raise Exception(result.get("message", "Failed to generate documentation"))
+                
+#         except Exception as e:
+#             error_msg = f"Error in generate_documentation: {str(e)}"
+#             logger.error(error_msg)
+            
+#             # Update processing status
+#             await update_processing_status(
+#                 file_id=file_id,
+#                 status="failed",
+#                 progress=0,  # Set progress to 0 for failed state
+#                 current_stage="documentation",
+#                 error=error_msg
+#             )
+            
+#             return {
+#                 "success": False,
+#                 "message": error_msg
+#             }
+    
+#     async def get_documentation(self, file_id: str) -> Optional[Dict[str, Any]]:
+#         """
+#         Get documentation for a file.
+        
+#         Args:
+#             file_id: Unique identifier for the file
+            
+#         Returns:
+#             dict: Documentation data if found, None otherwise
+#         """
+#         try:
+#             return await get_documentation(file_id)
+#         except Exception as e:
+#             logger.error(f"Error in get_documentation: {str(e)}")
+#             return None
